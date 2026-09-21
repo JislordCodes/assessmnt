@@ -151,3 +151,14 @@ Please use this document to explain your technical design decisions, trade-offs,
   6. **Observability:** **OpenTelemetry** traces and metrics (stage reached, cache hit rate, tokens, latency, 429 rate) exported through **.NET Aspire** / Azure Monitor and **Prometheus**, plus health checks and SLO alerts.
   7. **Persistence and idempotency:** store results in SQL or Cosmos DB for analytics, and accept a client-supplied idempotency key so retried submissions are not double counted.
   8. **Deployment:** stateless containers on Azure Container Apps or AKS with autoscaling on queue depth, and multiple Azure OpenAI deployments or regions behind a gateway for capacity and failover.
+
+---
+
+## Appendix: Live-model verification (findings that shaped the code)
+
+The suite runs offline, but the pipeline was also exercised against a real model (Alibaba `qwen-max`, OpenAI-compatible endpoint) to prove it is not simulator-only. All four README requests returned HTTP 200 and the batch summary matched exactly (3 compliant / 1 approval / 0 violations, NGN 85,500, USD 19; repeat calls returned `CacheHit`). Real-model findings:
+
+1. **Endpoint styles.** A bare Azure resource URL uses `AzureOpenAIClient`. Any endpoint with a path (Azure Foundry `.../openai/v1`, other OpenAI-compatible providers) uses the plain OpenAI client with the deployment name as `model`; otherwise the Azure client rewrites the URL to `/deployments/{name}/...` and returns 404.
+2. **Tools + JSON schema.** Combining function calling with a JSON-schema `response_format` made this provider emit pseudo tool-call text, so stage 1 fell back to stage 2. The tool stage now relies on the prompt for JSON (the strict validation layer still guards the result) while the tool-less stage keeps the schema. Result: stage 1 really calls both tools and reports `PolicyAgentWithTools`.
+3. **Malformed output is observable.** The warning log includes a truncated snippet of the raw model output, which is how (2) was diagnosed.
+4. **A real model is not the simulator.** Free-text fields (`subCategory`, `complianceNotes`, merchant wording) and `confidenceScore` differ from the README samples, which were produced by the deterministic simulator. Category, amount, currency, merchant and compliance status agree, except where the model follows the policy tool more strictly than the simulator: a $650 *annual* licence is `RequiresManagerApproval` (the tool text says annual licences over $100 need IT sign-off), whereas the simulator returns `Compliant`.
