@@ -123,7 +123,24 @@ public class ExpenseClassifierAgentTests
         Assert.Equal(2, seenOptions!.Tools!.Count);
         Assert.Contains(seenOptions.Tools, t => t.Name == "get_company_policy");
         Assert.Contains(seenOptions.Tools, t => t.Name == "get_spending_limits");
-        Assert.NotNull(seenOptions.ResponseFormat);
+        // Tool stage relies on the prompt + validation layer: some providers break when tools and a JSON schema are combined.
+        Assert.Null(seenOptions.ResponseFormat);
+    }
+
+    [Fact]
+    public async Task Classify_FallbackStage_KeepsSchemaConstrainedOutput()
+    {
+        var seen = new List<ChatOptions?>();
+        var client = new RecordingChatClient((_, o, _) =>
+        {
+            lock (seen) seen.Add(o);
+            var json = o?.Tools is { Count: > 0 } ? Factory.Json("Other") : Factory.Json("Marketing");
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
+        });
+
+        await Factory.CreateAgent(client).Classify("Billboard advert $500");
+
+        Assert.NotNull(seen[1]!.ResponseFormat);
     }
 
     [Fact]

@@ -232,7 +232,10 @@ public sealed class ExpenseClassifierAgent : IExpenseClassifierAgent
         var chatOptions = new ChatOptions
         {
             Temperature = 0f,
-            ResponseFormat = ResponseFormat,
+            // Some OpenAI-compatible providers (e.g. DashScope/Qwen) cannot combine tool calling with a JSON-schema response
+            // format and emit pseudo tool-call text instead. The tool stage therefore relies on the prompt for JSON and on
+            // the strict validation layer; the tool-less stage keeps the schema-constrained format.
+            ResponseFormat = withTools ? null : ResponseFormat,
             Tools = withTools ? _policyTools : null,
             ToolMode = withTools ? ChatToolMode.RequireAny : null
         };
@@ -250,7 +253,9 @@ public sealed class ExpenseClassifierAgent : IExpenseClassifierAgent
             var parsed = TryParse(text);
             if (parsed is null)
             {
-                _logger.LogWarning("Model returned malformed structured output in stage {Stage}.", stage);
+                _logger.LogWarning(
+                    "Model returned malformed structured output in stage {Stage}: {Snippet}",
+                    stage, text is { Length: > 300 } ? text[..300] + "..." : text);
             }
 
             return parsed;
@@ -485,7 +490,8 @@ public sealed class ExpenseClassifierAgent : IExpenseClassifierAgent
     // ------------------------------------------------------------------ prompts & schema
 
     private static readonly string SharedRules = """
-        Return ONLY a JSON object matching the supplied schema.
+        Return ONLY a single JSON object (no prose, no markdown) with exactly these keys:
+        category, subCategory, extractedAmount, currency, merchant, confidenceScore, complianceStatus, complianceNotes.
 
         Field rules:
         - category: one of Transportation, Food, Accommodation, Utilities, Office Supplies, Software Subscriptions, Other.
