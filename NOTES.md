@@ -2,7 +2,7 @@
 
 Please use this document to explain your technical design decisions, trade-offs, and scaling considerations. This provides the evaluation committee with direct insight into your engineering thought process.
 
-**Status:** `dotnet build` = 0 warnings / 0 errors. `dotnet test` = 88 passing (unit tests plus in-memory HTTP integration tests, all offline via `SimulationChatClient`).
+**Status:** `dotnet build` = 0 warnings / 0 errors. `dotnet test` = 89 passing (unit tests plus in-memory HTTP integration tests, all offline via `SimulationChatClient`).
 
 ---
 
@@ -39,7 +39,7 @@ Please use this document to explain your technical design decisions, trade-offs,
 
 * **How did you achieve strictly typed, deterministic structured output (`ResponseDto`) from both stages?**
 
-  1. **Constrained generation:** `Temperature = 0` plus `ResponseFormat = ChatResponseFormat.ForJsonSchema<LlmClassification>()`, so the model is asked for JSON that matches a typed schema with per-field descriptions. Both stages use the same schema.
+  1. **Constrained generation:** `Temperature = 0`. The tool-less fallback stage also sets `ResponseFormat = ChatResponseFormat.ForJsonSchema<LlmClassification>()` (typed schema with per-field descriptions). The tool stage lists the exact JSON keys in the prompt instead, because some providers break when tools and a JSON schema are combined (see the appendix); its output goes through the same parser and validation layer.
   2. **Defensive parsing:** case-insensitive, tolerant of numbers-as-strings, and tolerant of markdown-fenced JSON. Anything unparseable is treated as "malformed" (fallback or 502), never cached.
   3. **Validation layer (`BuildResponse`), because the model is not trusted:**
      - category and compliance status are canonicalized against whitelists (an invented status becomes `Unverifiable`);
