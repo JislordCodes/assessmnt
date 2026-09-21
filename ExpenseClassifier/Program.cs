@@ -55,9 +55,12 @@ else
     {
         var azure = sp.GetRequiredService<IOptions<AzureOpenAIOptions>>().Value;
 
-        // Foundry / "v1" endpoints (https://<res>.openai.azure.com/openai/v1) speak the plain OpenAI protocol with the
-        // deployment name as `model`; AzureOpenAIClient would rewrite the URL to /deployments/{name}/... and get a 404.
-        if (azure.Endpoint.TrimEnd('/').EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(azure.ApiKey))
+        // A bare resource URL (https://<res>.openai.azure.com/) uses the classic Azure protocol. Any endpoint with a path
+        // (Azure Foundry ".../openai/v1", or another OpenAI-compatible provider such as ".../compatible-mode/v1") speaks the
+        // plain OpenAI protocol with the deployment name as `model`; AzureOpenAIClient would rewrite the URL to
+        // /deployments/{name}/... and get a 404.
+        var endpointUri = new Uri(azure.Endpoint);
+        if (endpointUri.AbsolutePath.Trim('/').Length > 0 && !string.IsNullOrWhiteSpace(azure.ApiKey))
         {
             var v1 = new OpenAI.OpenAIClient(
                 new System.ClientModel.ApiKeyCredential(azure.ApiKey),
